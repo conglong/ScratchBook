@@ -1,0 +1,1 @@
+loosely collection of code scratches stated after Nov 13, 2012
