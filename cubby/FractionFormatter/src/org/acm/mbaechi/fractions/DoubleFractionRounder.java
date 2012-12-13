@@ -1,13 +1,13 @@
 package org.acm.mbaechi.fractions;
 
-public class DoubleFractionRounder extends AbstractFractionRounder<Double>  {
-	DoubleFractionRounder(int fraction) {
-		super(fraction);
-	}
+public class DoubleFractionRounder extends AbstractFractionRounder<Double> {
 
-	@Override
-	public Double round(Double number) {
-		return Math.round(number / divisor) * divisor;
-	}
+    DoubleFractionRounder(int fraction) {
+        super(fraction);
+    }
 
+    @Override
+    public Double round(Double number) {
+        return Math.round(number / divisor) * divisor;
+    }
 }
