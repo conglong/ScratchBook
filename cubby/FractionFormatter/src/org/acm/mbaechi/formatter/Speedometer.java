@@ -9,33 +9,38 @@ public class Speedometer {
 	private static Logger logger = Logger.getLogger(Speedometer.class
 			.getCanonicalName());
 
+	private static final int max =1000;
 	/**
 	 * @param args
 	 */
 	public static void main(String[] args) {
-		long count = 1000l;
-		for (long n = 1; n < 101; n *= 10) {
+		double numbers[] = new double[max];
+		for (int n = 0; n<max;n++) {
+			numbers[n]=Math.random() * 100d;
+		}
+		int count = 10000;
+		NumberFormatter formatter = FractionNumberFormatter
+				.getFractionFormatter(32);
+		for (int n = 1; n < 101; n *= 10) {
 			count *= n;
-			NumberFormatter formatter = FractionNumberFormatter
-					.getFractionFormatter(32);
 			StopWatch stopWatch = new StopWatch();
 			stopWatch.start();
-			for (long i = 0; i < count; i++) {
-				formatter.format(Math.random() * 100d);
+			for (int i = 0; i < count; i++) {
+				formatter.format(numbers[i%max]);
 			}
 			stopWatch.stop();
 			logger.log(Level.INFO, "Time taken uncached (" + count + ") "
 					+ stopWatch.toString());
 		}
-		count = 1000l;
-		for (long n = 1; n < 101; n *= 10) {
+		count = 10000;
+		formatter = FractionNumberFormatter
+				.getFractionFormatter(32, true);
+		for (int n = 1; n < 101; n *= 10) {
 			count *= n;
-			NumberFormatter formatter = FractionNumberFormatter
-					.getFractionFormatter(32, true);
 			StopWatch stopWatch = new StopWatch();
 			stopWatch.start();
-			for (long i = 0; i < count; i++) {
-				formatter.format(Math.random() * 100d);
+			for (int i = 0; i < count; i++) {
+				formatter.format(numbers[i%max]);
 			}
 			stopWatch.stop();
 			logger.log(Level.INFO, "Time taken cached (" + count + ": "
