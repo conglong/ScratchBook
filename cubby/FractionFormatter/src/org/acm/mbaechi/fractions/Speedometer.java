@@ -2,11 +2,10 @@ package org.acm.mbaechi.fractions;
 
 import java.util.logging.Level;
 import java.util.logging.Logger;
-
 import org.apache.commons.lang3.time.StopWatch;
 
 public class Speedometer {
-	private static Logger logger = Logger.getLogger(Speedometer.class
+	private static final Logger logger = Logger.getLogger(Speedometer.class
 			.getCanonicalName());
 
 	private static final int max =1000;
@@ -16,7 +15,7 @@ public class Speedometer {
 	public static void main(String[] args) {
 		double numbers[] = new double[max];
 		for (int n = 0; n<max;n++) {
-			numbers[n]=Math.random() * 100d;
+			numbers[n]= Double.valueOf(String.format("%.9f", Math.random() * 100d));
 		}
 		formatters(numbers);
 		rounders(numbers);
@@ -34,8 +33,7 @@ public class Speedometer {
 				formatter.format(numbers[i%max]);
 			}
 			stopWatch.stop();
-			logger.log(Level.INFO, "Time taken uncached (" + count + ") "
-					+ stopWatch.toString());
+			logger.log(Level.INFO, "Time taken uncached ({0}) {1}", new Object[]{count, stopWatch.toString()});
 		}
 		count = 10000;
 		formatter = FractionNumberFormatter
@@ -48,9 +46,7 @@ public class Speedometer {
 				formatter.format(numbers[i%max]);
 			}
 			stopWatch.stop();
-			logger.log(Level.INFO, "Time taken cached (" + count + ": "
-					+ ((FractionNumberFormatter) formatter).getCallHitRatio()
-					+ ") " + stopWatch.toString());
+			logger.log(Level.INFO, "Time taken cached ({0}: {1}) {2}", new Object[]{count, ((FractionNumberFormatter) formatter).getCallHitRatio(), stopWatch.toString()});
 		}
 	}
 	
@@ -65,11 +61,10 @@ public class Speedometer {
 				dRounder.round(numbers[i%max]);
 			}
 			stopWatch.stop();
-			logger.log(Level.INFO, "Rounder, time taken uncached (" + count + ") "
-					+ stopWatch.toString());
+			logger.log(Level.INFO, "Rounder, time taken uncached ({0}) {1}", new Object[]{count, stopWatch.toString()});
 		}
 		count = 10000;
-		CachingFractionRounder<Double> cRounder = new CachingFractionRounder<Double>(
+		CachingFractionRounder<Double> cRounder = new CachingFractionRounder<>(
 				new DoubleFractionRounder(32));
 		for (int n = 1; n < 101; n *= 10) {
 			count *= n;
@@ -79,9 +74,7 @@ public class Speedometer {
 				cRounder.round(numbers[i%max]);
 			}
 			stopWatch.stop();
-			logger.log(Level.INFO, "Rounder, time taken cached (" + count + ": "
-					+ cRounder.getCallHitRatio()
-					+ ") " + stopWatch.toString());
+			logger.log(Level.INFO, "Rounder, time taken cached ({0}: {1}) {2}", new Object[]{count, cRounder.getCallHitRatio(), stopWatch.toString()});
 		}
 	}
 }

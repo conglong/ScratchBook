@@ -7,18 +7,18 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 
 public class FractionNumberFormatter implements NumberFormatter {
-	private static Logger logger = Logger
+	private static final Logger logger = Logger
 			.getLogger(FractionNumberFormatter.class.getCanonicalName());
 	private final double divisor;
 	private final int significantDecimals;
 	private final boolean doCache;
 	private double calls;
 	private double hits;
-	private static Map<String, String> formatLookup = new ConcurrentHashMap<String, String>(
+	private static Map<String, String> formatLookup = new ConcurrentHashMap<>(
 			10000);
 
 	public double getCallHitRatio() {
-		logger.log(Level.INFO, "calls=" + calls + ", hits=" + hits);
+		logger.log(Level.INFO, "calls={0}, hits={1}", new Object[]{calls, hits});
 		return hits / (calls == 0 ? 1d : calls);
 	}
 
@@ -49,6 +49,7 @@ public class FractionNumberFormatter implements NumberFormatter {
 //		return String.format("%." + significantDecimals + "f", number);
 	}
 
+    @Override
 	public String format(BigDecimal number) {
 		calls++;
 		if (doCache && formatLookup.containsKey(number.toString())) {
@@ -62,6 +63,7 @@ public class FractionNumberFormatter implements NumberFormatter {
 		return internalFormat(number).toString();
 	}
 
+    @Override
 	public String format(Double number) {
 		calls++;
 		if (doCache) {
