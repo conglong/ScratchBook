@@ -1,4 +1,4 @@
-package org.acm.mbaechi.formatter;
+package org.acm.mbaechi.fractions;
 
 import java.math.BigDecimal;
 import java.util.Map;
@@ -9,7 +9,6 @@ import java.util.logging.Logger;
 public class FractionNumberFormatter implements NumberFormatter {
 	private static Logger logger = Logger
 			.getLogger(FractionNumberFormatter.class.getCanonicalName());
-	private final int fraction;
 	private final double divisor;
 	private final int significantDecimals;
 	private final boolean doCache;
@@ -24,7 +23,6 @@ public class FractionNumberFormatter implements NumberFormatter {
 	}
 
 	private FractionNumberFormatter(int fraction, boolean doCache) {
-		this.fraction = fraction;
 		this.divisor = 1d / fraction;
 		int countScaling = 1;
 		double scalar = divisor * 10d;
@@ -82,8 +80,6 @@ public class FractionNumberFormatter implements NumberFormatter {
 
 	private Double internalFormat(Double number) {
 		double result = Math.round(number / divisor) * divisor;
-		logger.log(Level.FINEST, "Formatted " + number + " in 1/" + fraction
-				+ " results in " + result);
 		return result;
 	}
 
@@ -91,8 +87,6 @@ public class FractionNumberFormatter implements NumberFormatter {
 		BigDecimal result = number.divide(BigDecimal.valueOf(divisor))
 				.setScale(0, BigDecimal.ROUND_HALF_UP)
 				.multiply(BigDecimal.valueOf(divisor));
-		logger.log(Level.FINEST, "Formatted " + number + " in 1/" + fraction
-				+ " results in " + result);
 		return result;
 	}
 }

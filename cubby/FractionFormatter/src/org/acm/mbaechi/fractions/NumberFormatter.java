@@ -1,4 +1,4 @@
-package org.acm.mbaechi.formatter;
+package org.acm.mbaechi.fractions;
 
 import java.math.BigDecimal;
 
