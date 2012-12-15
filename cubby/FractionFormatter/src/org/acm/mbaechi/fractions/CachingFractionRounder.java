@@ -19,14 +19,14 @@ public class CachingFractionRounder<T> {
     }
 
     public double getCallHitRatio() {
-        synchronized (this) {
-            logger.log(Level.INFO, "calls={0}, hits={1}", new Object[]{Double.valueOf(calls).intValue(), Double.valueOf(hits).intValue()});
+        synchronized (cache) {
+            logger.log(Level.FINE, "calls={0}, hits={1}", new Object[]{Double.valueOf(calls).intValue(), Double.valueOf(hits).intValue()});
             return hits / (calls == 0 ? 1d : calls);
         }
     }
 
     public String round(T number) {
-        synchronized (this) {
+        synchronized (cache) {
             calls++;
             final String key = number.toString();
             if (cache.containsKey(key)) {
