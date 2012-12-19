@@ -27,7 +27,7 @@ public class Speedometer {
         NumberFormatter formatter = FractionNumberFormatter
                 .getFractionFormatter(32);
         for (int n = 1; n < 101; n *= 10) {
-            count *= n;
+            count *= 10;
             StopWatch stopWatch = new StopWatch();
             stopWatch.start();
             for (int i = 0; i < count; i++) {
@@ -40,7 +40,7 @@ public class Speedometer {
         formatter = FractionNumberFormatter
                 .getFractionFormatter(32, true);
         for (int n = 1; n < 101; n *= 10) {
-            count *= n;
+            count *= 10;
             StopWatch stopWatch = new StopWatch();
             stopWatch.start();
             for (int i = 0; i < count; i++) {
@@ -55,7 +55,7 @@ public class Speedometer {
         int count = 10000;
         DoubleFractionRounder dRounder = new DoubleFractionRounder(32);
         for (int n = 1; n < 101; n *= 10) {
-            count *= n;
+            count *= 10;
             StopWatch stopWatch = new StopWatch();
             stopWatch.start();
             for (int i = 0; i < count; i++) {
@@ -68,7 +68,7 @@ public class Speedometer {
         CachingFractionRounder<Double> cRounder = new CachingFractionRounder<>(
                 new DoubleFractionRounder(32));
         for (int n = 1; n < 101; n *= 10) {
-            count *= n;
+            count *= 10;
             StopWatch stopWatch = new StopWatch();
             stopWatch.start();
             for (int i = 0; i < count; i++) {
