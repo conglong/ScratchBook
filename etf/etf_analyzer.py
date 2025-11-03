@@ -135,6 +135,7 @@ def get_etf_holdings(ticker: str) -> pd.DataFrame:
             # Create DataFrame
             holdings_df = pd.DataFrame(holdings_data, columns=['Symbol', 'Name', '% Assets'])
             holdings_df.set_index('Symbol', inplace=True)
+            holdings_df.rename(columns={'Symbol':"symbol","Name": "name",'% Assets': 'pct_assets'}, inplace=True)
     except Exception as e:
         print(f"Error scraping from Yahoo Finance: {e}")
 
@@ -154,7 +155,7 @@ def get_etf_holdings(ticker: str) -> pd.DataFrame:
         now = pd.Timestamp.now().isoformat()
         for symbol, row in holdings_df.iterrows():
             conn.execute("INSERT OR REPLACE INTO holdings (ticker, symbol, name, pct_assets, fetched_at) VALUES (?, ?, ?, ?, ?)",
-                         (ticker, symbol, row['Name'], row['% Assets'], now))
+                         (ticker, symbol, row['name'], row['pct_assets'], now))
         conn.commit()
         conn.close()
         print(f"Successfully stored {len(holdings_df)} holdings for {ticker} in DB.")
@@ -375,8 +376,8 @@ def plot_results(returns_df: pd.DataFrame, rolling_corr: pd.Series, cross_corrs:
 if __name__ == "__main__":
     # --- Configuration ---
     # Example 1: Tech vs. Broader Market (QQQ vs. SPY)
-    TICKER_1 = 'QQQ'
-    TICKER_2 = 'SPY'
+    TICKER_1 = "TNA" # 'SOXL' #'QQQ'
+    TICKER_2 = "TQQQ" #'VGT' #'SPY'
     # Example 2: Gold vs. Gold Miners (GLD vs. GDX)
     # TICKER_1 = 'GLD'
     # TICKER_2 = 'GDX'
