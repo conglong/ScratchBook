@@ -1,3 +1,13 @@
+"""
+ETF Analysis Module
+
+This module provides tools for analyzing ETF data, including:
+- Scraping holdings data from Yahoo Finance.
+- Fetching historical price data.
+- Analyzing correlations (static and rolling).
+- Analyzing lead-lag relationships using cross-correlation.
+- Visualizing results with Matplotlib and Seaborn.
+"""
 import pandas as pd
 import numpy as np
 import yfinance as yf
@@ -21,7 +31,7 @@ def get_etf_holdings(ticker: str) -> pd.DataFrame:
     Returns:
         pd.DataFrame: A DataFrame containing the ETF's holdings, or an empty DataFrame if failed.
     """
-    url = f"https://finance.yahoo.com/quote/{ticker}/holdings?p={ticker}"
+    url = f"https://finance.yahoo.com/quote/{ticker}/holdings/"
     headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'}
     
     try:
@@ -65,7 +75,8 @@ def get_price_data(tickers: List[str], start_date: str, end_date: str) -> pd.Dat
     """
     print(f"\nFetching price data for {tickers} from {start_date} to {end_date}...")
     try:
-        prices = yf.download(tickers, start=start_date, end=end_date)['Adj Close']
+        # auto_adjust=True is now default, so 'Close' is the adjusted close
+        prices = yf.download(tickers, start=start_date, end=end_date, auto_adjust=True)['Close']
         daily_returns = prices.pct_change().dropna()
         daily_returns.columns = [f"{ticker}_Return" for ticker in tickers]
         print("Price data fetched successfully.")
@@ -161,6 +172,18 @@ def compare_holdings(holdings1: pd.DataFrame, holdings2: pd.DataFrame, ticker1: 
 def plot_results(returns_df: pd.DataFrame, rolling_corr: pd.Series, cross_corrs: Dict[int, float], ticker1: str, ticker2: str):
     """
     Generates and displays plots for the analysis.
+    
+    Plots included:
+    1. Normalized Price Performance (Cumulative Returns).
+    2. Rolling Correlation over time.
+    3. Cross-Correlation bar chart for lead/lag analysis.
+    
+    Args:
+        returns_df (pd.DataFrame): DataFrame containing daily returns.
+        rolling_corr (pd.Series): Series containing rolling correlation values.
+        cross_corrs (Dict[int, float]): Dictionary of lag vs. correlation values.
+        ticker1 (str): The first ticker symbol.
+        ticker2 (str): The second ticker symbol.
     """
     print("\nGenerating plots...")
     
