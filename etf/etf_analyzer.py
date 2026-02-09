@@ -1,3 +1,13 @@
+"""
+ETF Analysis Module
+
+This module provides tools for analyzing ETF data, including:
+- Scraping holdings data from Yahoo Finance.
+- Fetching historical price data.
+- Analyzing correlations (static and rolling).
+- Analyzing lead-lag relationships using cross-correlation.
+- Visualizing results with Matplotlib and Seaborn.
+"""
 import pandas as pd
 import numpy as np
 import io
