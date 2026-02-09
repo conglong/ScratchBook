@@ -10,20 +10,92 @@ This module provides tools for analyzing ETF data, including:
 """
 import pandas as pd
 import numpy as np
+import io
 import yfinance as yf
 import requests
 from bs4 import BeautifulSoup
 import matplotlib.pyplot as plt
 import seaborn as sns
 from typing import List, Dict, Tuple
+import sqlite3
+import os
 
 # Set plot style for better aesthetics
 sns.set_style("whitegrid")
 plt.rcParams['figure.figsize'] = (15, 7)
 
+# SQLite DB setup
+DB_FILE = "etf_data.sqlite"
+
+def get_db_connection():
+    conn = sqlite3.connect(DB_FILE)
+    return conn
+
+def init_db():
+    conn = get_db_connection()
+    c = conn.cursor()
+    # Holdings table
+    c.execute('''CREATE TABLE IF NOT EXISTS holdings (
+        ticker TEXT,
+        symbol TEXT,
+        name TEXT,
+        pct_assets REAL,
+        fetched_at TEXT,
+        PRIMARY KEY (ticker, symbol)
+    )''')
+    # Price data table
+    c.execute('''CREATE TABLE IF NOT EXISTS prices (
+        ticker TEXT,
+        date TEXT,
+        adj_close REAL,
+        fetched_at TEXT,
+        PRIMARY KEY (ticker, date)
+    )''')
+    conn.commit()
+    conn.close()
+
+init_db()
+
+def parse_local_html(file_path: str) -> pd.DataFrame:
+    """
+    Parses a local HTML file containing ETF holdings data.
+    
+    Args:
+        file_path (str): Path to the HTML file.
+        
+    Returns:
+        pd.DataFrame: A DataFrame containing the ETF's holdings.
+    """
+    try:
+        with open(file_path, 'r') as f:
+            html_content = f.read()
+        
+        soup = BeautifulSoup(html_content, 'html.parser')
+        
+        # Extract data from the HTML
+        holdings_data = []
+        contents = soup.find_all('div', class_='content')
+        
+        for content in contents:
+            symbol = content.find('span', class_='symbol')
+            if symbol:
+                symbol = symbol.text.strip()
+                name = content.find('span', class_='name').text.strip()
+                assets = float(content.find('span', class_='data').text.strip().rstrip('%'))
+                holdings_data.append([symbol, name, assets])
+        
+        # Create DataFrame
+        df = pd.DataFrame(holdings_data, columns=['Symbol', 'Name', '% Assets'])
+        df.set_index('Symbol', inplace=True)
+        return df
+        
+    except Exception as e:
+        print(f"Error parsing local HTML file: {e}")
+        return pd.DataFrame()
+
 def get_etf_holdings(ticker: str) -> pd.DataFrame:
     """
-    Scrapes the holdings of a given ETF ticker from Yahoo Finance.
+    Gets the holdings of a given ETF ticker from local cache, database, or Yahoo Finance.
     
     Args:
         ticker (str): The ETF ticker symbol.
@@ -31,35 +103,75 @@ def get_etf_holdings(ticker: str) -> pd.DataFrame:
     Returns:
         pd.DataFrame: A DataFrame containing the ETF's holdings, or an empty DataFrame if failed.
     """
-    url = f"https://finance.yahoo.com/quote/{ticker}/holdings/"
-    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'}
+        # Try to load from DB first
+    conn = get_db_connection()
+    query = "SELECT symbol, name, pct_assets FROM holdings WHERE ticker = ?"
+    df = pd.read_sql_query(query, conn, params=(ticker,))
+    conn.close()
+    if not df.empty:
+        df.set_index('symbol', inplace=True)
+        print(f"Loaded {len(df)} holdings for {ticker} from DB.")
+        return df
+
+    holdings_df = pd.DataFrame()
     
+    # Try Yahoo Finance first
+    url = f"https://finance.yahoo.com/quote/{ticker}/holdings/"
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8'
+    }
     try:
-        print(f" scraping holdings for {ticker}...")
+        print(f"Scraping holdings for {ticker} from Yahoo Finance...")
         response = requests.get(url, headers=headers)
-        response.raise_for_status() # Raise an exception for bad status codes
+        response.raise_for_status()
         
+        # Parse the response content directly using the same method as parse_local_html
         soup = BeautifulSoup(response.text, 'html.parser')
+        holdings_section = soup.find('section', attrs={'data-testid': 'top-holdings'})
         
-        # Find the holdings table
-        tables = soup.find_all('table')
-        if not tables:
-            print(f"Warning: Could not find holdings table for {ticker}.")
+        if holdings_section:
+            holdings_data = []
+            contents = holdings_section.find_all('div', class_='content')
+            
+            for content in contents:
+                symbol = content.find('span', class_='symbol')
+                if symbol:
+                    symbol = symbol.text.strip()
+                    name = content.find('span', class_='name').text.strip()
+                    assets = float(content.find('span', class_='data').text.strip().rstrip('%'))
+                    holdings_data.append([symbol, name, assets])
+            
+            # Create DataFrame
+            holdings_df = pd.DataFrame(holdings_data, columns=['Symbol', 'Name', '% Assets'])
+            holdings_df.set_index('Symbol', inplace=True)
+    except Exception as e:
+        print(f"Error scraping from Yahoo Finance: {e}")
+
+    # If Yahoo Finance fails, try local HTML file
+    if holdings_df.empty:
+        local_file = f"{ticker.lower()}.html"
+        if os.path.exists(local_file):
+            print(f"Trying to parse local file: {local_file}")
+            holdings_df = parse_local_html(local_file)
+        else:
+            print(f"No local file found for {ticker}")
             return pd.DataFrame()
 
-        holdings_df = pd.read_html(str(tables[0]))[0]
-        
-        # Clean up the DataFrame
-        holdings_df = holdings_df[['Symbol', 'Name', '% Assets']]
-        holdings_df['% Assets'] = holdings_df['% Assets'].str.rstrip('%').astype(float)
-        holdings_df.set_index('Symbol', inplace=True)
-        
-        print(f"Successfully scraped {len(holdings_df)} holdings for {ticker}.")
+    if not holdings_df.empty:
+        # Store in DB
+        conn = get_db_connection()
+        now = pd.Timestamp.now().isoformat()
+        for symbol, row in holdings_df.iterrows():
+            conn.execute("INSERT OR REPLACE INTO holdings (ticker, symbol, name, pct_assets, fetched_at) VALUES (?, ?, ?, ?, ?)",
+                         (ticker, symbol, row['Name'], row['% Assets'], now))
+        conn.commit()
+        conn.close()
+        print(f"Successfully stored {len(holdings_df)} holdings for {ticker} in DB.")
         return holdings_df
-
-    except Exception as e:
-        print(f"Error scraping holdings for {ticker}: {e}")
-        return pd.DataFrame()
+    
+    print(f"Could not retrieve holdings for {ticker} from any source.")
+    return pd.DataFrame()
 
 def get_price_data(tickers: List[str], start_date: str, end_date: str) -> pd.DataFrame:
     """
@@ -74,12 +186,42 @@ def get_price_data(tickers: List[str], start_date: str, end_date: str) -> pd.Dat
         pd.DataFrame: A DataFrame containing daily returns for each ticker.
     """
     print(f"\nFetching price data for {tickers} from {start_date} to {end_date}...")
-    try:
-        # auto_adjust=True is now default, so 'Close' is the adjusted close
-        prices = yf.download(tickers, start=start_date, end=end_date, auto_adjust=True)['Close']
+    # Try to load from DB first
+    conn = get_db_connection()
+    dfs = []
+    for ticker in tickers:
+        query = "SELECT date, adj_close FROM prices WHERE ticker = ? AND date >= ? AND date <= ? ORDER BY date ASC"
+        df = pd.read_sql_query(query, conn, params=(ticker, start_date, end_date))
+        if not df.empty:
+            df.set_index('date', inplace=True)
+            dfs.append(df['adj_close'].rename(ticker))
+    conn.close()
+    if len(dfs) == len(tickers):
+        prices = pd.concat(dfs, axis=1)
         daily_returns = prices.pct_change().dropna()
         daily_returns.columns = [f"{ticker}_Return" for ticker in tickers]
-        print("Price data fetched successfully.")
+        print("Loaded price data from DB.")
+        return daily_returns
+    # If not in DB, fetch from Yahoo Finance
+    try:
+        data = yf.download(tickers, start=start_date, end=end_date, auto_adjust=True)
+        if 'Adj Close' in data.columns:
+            prices = data['Adj Close']
+        else:
+            prices = data['Close']
+        # Store in DB
+        conn = get_db_connection()
+        now = pd.Timestamp.now().isoformat()
+        for ticker in tickers:
+            if ticker in prices.columns:
+                for date, value in prices[ticker].dropna().items():
+                    conn.execute("INSERT OR REPLACE INTO prices (ticker, date, adj_close, fetched_at) VALUES (?, ?, ?, ?)",
+                                 (ticker, str(date.date()), float(value), now))
+        conn.commit()
+        conn.close()
+        daily_returns = prices.pct_change().dropna()
+        daily_returns.columns = [f"{ticker}_Return" for ticker in tickers]
+        print("Price data fetched from Yahoo Finance and stored in DB.")
         return daily_returns
     except Exception as e:
         print(f"Error fetching price data: {e}")
@@ -153,8 +295,8 @@ def compare_holdings(holdings1: pd.DataFrame, holdings2: pd.DataFrame, ticker1: 
     
     # Calculate overlap
     common_tickers = len(merged_holdings)
-    overlap_weight_ticker1 = merged_holdings[f'% Assets_{ticker1}'].sum()
-    overlap_weight_ticker2 = merged_holdings[f'% Assets_{ticker2}'].sum()
+    overlap_weight_ticker1 = merged_holdings[f'pct_assets_{ticker1}'].sum()
+    overlap_weight_ticker2 = merged_holdings[f'pct_assets_{ticker2}'].sum()
 
     print("\n--- Constituency Analysis ---")
     print(f"Total holdings for {ticker1}: {len(holdings1)}")
@@ -165,30 +307,24 @@ def compare_holdings(holdings1: pd.DataFrame, holdings2: pd.DataFrame, ticker1: 
     
     # Display top 10 common holdings
     print("\nTop 10 Common Holdings:")
-    top_10 = merged_holdings.sort_values(by=f'% Assets_{ticker1}', ascending=False).head(10)
-    print(top_10[[f'Name_{ticker1}', f'% Assets_{ticker1}', f'% Assets_{ticker2}']])
+    top_10 = merged_holdings.sort_values(by=f'pct_assets_{ticker1}', ascending=False).head(10)
+    print(top_10[[f'name_{ticker1}', f'pct_assets_{ticker1}', f'pct_assets_{ticker2}']])
     print("--------------------------")
     
 def plot_results(returns_df: pd.DataFrame, rolling_corr: pd.Series, cross_corrs: Dict[int, float], ticker1: str, ticker2: str):
     """
-    Generates and displays plots for the analysis.
-    
-    Plots included:
-    1. Normalized Price Performance (Cumulative Returns).
-    2. Rolling Correlation over time.
-    3. Cross-Correlation bar chart for lead/lag analysis.
-    
-    Args:
-        returns_df (pd.DataFrame): DataFrame containing daily returns.
-        rolling_corr (pd.Series): Series containing rolling correlation values.
-        cross_corrs (Dict[int, float]): Dictionary of lag vs. correlation values.
-        ticker1 (str): The first ticker symbol.
-        ticker2 (str): The second ticker symbol.
+    Generates, displays, and saves plots for the analysis.
     """
+    # Create plots directory if it doesn't exist
+    plots_dir = "plots"
+    if not os.path.exists(plots_dir):
+        os.makedirs(plots_dir)
+    
     print("\nGenerating plots...")
+    timestamp = pd.Timestamp.now().strftime("%Y%m%d_%H%M%S")
     
     # Plot 1: Cumulative (Normalized) Returns
-    plt.figure()
+    plt.figure(figsize=(15, 7))
     normalized_prices = (1 + returns_df).cumprod()
     normalized_prices.plot()
     plt.title(f'Normalized Price Performance: {ticker1} vs. {ticker2}')
@@ -196,10 +332,13 @@ def plot_results(returns_df: pd.DataFrame, rolling_corr: pd.Series, cross_corrs:
     plt.xlabel('Date')
     plt.legend([ticker1, ticker2])
     plt.tight_layout()
+    plot_path = os.path.join(plots_dir, f'normalized_returns_{ticker1}_{ticker2}_{timestamp}.png')
+    plt.savefig(plot_path, dpi=300, bbox_inches='tight')
+    print(f"Saved normalized returns plot to: {plot_path}")
     plt.show()
 
     # Plot 2: Rolling Correlation
-    plt.figure()
+    plt.figure(figsize=(15, 7))
     rolling_corr.plot()
     plt.title(f'{len(rolling_corr.index)}-Day Rolling Correlation: {ticker1} vs. {ticker2}')
     plt.ylabel('Correlation Coefficient')
@@ -207,10 +346,13 @@ def plot_results(returns_df: pd.DataFrame, rolling_corr: pd.Series, cross_corrs:
     plt.axhline(rolling_corr.mean(), color='red', linestyle='--', label=f'Average: {rolling_corr.mean():.2f}')
     plt.legend()
     plt.tight_layout()
+    plot_path = os.path.join(plots_dir, f'rolling_correlation_{ticker1}_{ticker2}_{timestamp}.png')
+    plt.savefig(plot_path, dpi=300, bbox_inches='tight')
+    print(f"Saved rolling correlation plot to: {plot_path}")
     plt.show()
 
     # Plot 3: Lead-Lag Cross-Correlation
-    plt.figure()
+    plt.figure(figsize=(15, 7))
     lag_df = pd.Series(cross_corrs).sort_index()
     lag_df.plot(kind='bar', color='skyblue')
     
@@ -224,6 +366,9 @@ def plot_results(returns_df: pd.DataFrame, rolling_corr: pd.Series, cross_corrs:
     plt.ylabel('Correlation')
     plt.legend()
     plt.tight_layout()
+    plot_path = os.path.join(plots_dir, f'lead_lag_correlation_{ticker1}_{ticker2}_{timestamp}.png')
+    plt.savefig(plot_path, dpi=300, bbox_inches='tight')
+    print(f"Saved lead-lag correlation plot to: {plot_path}")
     plt.show()
     
     # Interpretation of lead-lag plot
@@ -242,7 +387,6 @@ if __name__ == "__main__":
     # Example 1: Tech vs. Broader Market (QQQ vs. SPY)
     TICKER_1 = 'QQQ'
     TICKER_2 = 'SPY'
-    
     # Example 2: Gold vs. Gold Miners (GLD vs. GDX)
     # TICKER_1 = 'GLD'
     # TICKER_2 = 'GDX'
@@ -256,21 +400,21 @@ if __name__ == "__main__":
     holdings_t1 = get_etf_holdings(TICKER_1)
     holdings_t2 = get_etf_holdings(TICKER_2)
     compare_holdings(holdings_t1, holdings_t2, TICKER_1, TICKER_2)
-    
+
     # 2. Get Price Data
     returns_data = get_price_data([TICKER_1, TICKER_2], START_DATE, END_DATE)
 
     if not returns_data.empty:
         # 3. Analyze Correlation
         overall_correlation, rolling_correlation = analyze_correlation(returns_data, TICKER_1, TICKER_2, window=ROLLING_WINDOW)
-        
+
         print("\n--- Correlation Analysis ---")
         print(f"Overall correlation between {TICKER_1} and {TICKER_2}: {overall_correlation:.4f}")
         print("----------------------------")
-        
+
         # 4. Analyze Lead-Lag Relationship
         cross_correlation_results = analyze_lead_lag(returns_data, TICKER_1, TICKER_2, max_lag=MAX_LAG)
-        
+
         # 5. Visualize Results
         plot_results(returns_data, rolling_correlation, cross_correlation_results, TICKER_1, TICKER_2)
     else:
